@@ -37,6 +37,7 @@ body { margin:0; overflow:hidden; background:black; }
 <div id="overlay"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
 
@@ -119,27 +120,58 @@ for(let i=0;i<40;i++){
   createSegment(-i*10, i%2===0?"water":"forest");
 }
 
-// THREATS
+// --- THREATS 
 let threats = [];
+const loader = new THREE.GLTFLoader();
 
-function createThreat(z,type){
-  let t = new THREE.Mesh(
-    new THREE.SphereGeometry(1,16,16),
-    new THREE.MeshStandardMaterial({
-      color: type==="AT"?0xff4444:0xffff88,
-      emissive: type==="AT"?0x440000:0x444400
-    })
-  );
+// REPLACE THIS with your actual GitHub Raw URL
+const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb/';
 
-  t.position.set(0,1.5,z);
-  t.userData = {type, triggered:false};
-  scene.add(t);
-  threats.push(t);
+let threatModelMaster;
+
+// Load the model once, then clone it for performance
+loader.load(GLB_URL, (gltf) => {
+    threatModelMaster = gltf.scene;
+    // Initial spawn once model is loaded
+    for(let i=1; i<30; i++){
+        spawnThreatInstance(-i*20, Math.random() > 0.5 ? "AT" : "PT");
+    }
+}, undefined, (error) => {
+    console.error("Error loading GLB:", error);
+});
+
+function spawnThreatInstance(z, type) {
+    if (!threatModelMaster) return;
+
+    // Clone the loaded GLB
+    let t = threatModelMaster.clone();
+    
+    // Scale it (adjust these numbers if your model is too big/small)
+    t.scale.set(1, 1, 1); 
+
+    // Apply colors to the model based on type
+    // Note: This assumes your GLB has a mesh. 
+    // We traverse it to find the material and tint it.
+    t.traverse((child) => {
+        if (child.isMesh) {
+            child.material = child.material.clone(); // Clone so we don't tint every threat the same
+            if (type === "AT") {
+                child.material.color.set(0xff4444); // Red for Actual
+                child.material.emissive.set(0x440000);
+            } else {
+                child.material.color.set(0xffff88); // Yellow for Perceived
+                child.material.emissive.set(0x444400);
+            }
+        }
+    });
+
+    t.position.set(0, 1.5, z);
+    t.userData = { type, triggered: false };
+    
+    scene.add(t);
+    threats.push(t);
 }
-
-for(let i=1;i<30;i++){
-  createThreat(-i*20, Math.random()>0.5?"AT":"PT");
-}
+// --- THREATS SECTION END ---
 
 // GAME STATE
 let speed = 0.2;
