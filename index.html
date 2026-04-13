@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Threat Loop - Security Bypass</title>
+    <title>Threat Loop - CSP Safe</title>
     <style>
         body { margin:0; overflow:hidden; background:black; }
         #ui { position:absolute; top:20px; left:20px; color:white; font-family:Arial; z-index:10; }
@@ -16,25 +16,29 @@
     Cooldown: <span id="cooldown">Ready</span>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+<script type="module">
+// We import directly from the CDN as modules. 
+// This avoids the 'eval' issues found in the older "Global" scripts.
+import * as THREE from 'https://cdn.skypack.dev/three@0.158.0';
+import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
 
-<script>
-// --- CONFIG ---
-// We use the direct raw.githubusercontent link to avoid GitHub's redirector which triggers CSP
 const GLB_URL = 'https://raw.githubusercontent.com/manmuk1711-cmyk/tunnel-v2/main/knife%20threat.%20glb.glb';
 
+// SCENE SETUP
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+scene.fog = new THREE.Fog(0x000000, 10, 60);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 5);
-scene.add(light);
+const sun = new THREE.DirectionalLight(0xffffff, 1);
+sun.position.set(5, 10, 5);
+scene.add(sun);
 
+// PLAYER
 const player = new THREE.Object3D();
 player.position.set(0, 1.5, 0);
 scene.add(player);
@@ -54,32 +58,27 @@ player.add(armourGroup);
 
 // THREATS
 let threats = [];
+const loader = new GLTFLoader();
 
-// CSP SAFE LOADING CHECK
-if (typeof THREE.GLTFLoader === 'undefined') {
-    console.error("Loader blocked by CSP. Attempting fallback...");
-} else {
-    const loader = new THREE.GLTFLoader();
-    loader.load(GLB_URL, function(gltf) {
-        const master = gltf.scene;
-        for(let i=1; i<30; i++){
-            const isAT = Math.random() > 0.5;
-            const t = master.clone();
-            t.scale.set(1.2, 1.2, 1.2);
-            t.position.set(0, 1.5, -i * 20);
-            t.userData = { type: isAT ? "AT" : "PT", triggered: false };
-            
-            t.traverse(function(node) {
-                if (node.isMesh) {
-                    node.material = node.material.clone();
-                    node.material.color.set(isAT ? 0xff4444 : 0xffff88);
-                }
-            });
-            scene.add(t);
-            threats.push(t);
-        }
-    }, undefined, function(e) { console.error("GLB Error:", e); });
-}
+loader.load(GLB_URL, (gltf) => {
+    const master = gltf.scene;
+    for(let i=1; i<30; i++){
+        const isAT = Math.random() > 0.5;
+        const t = master.clone();
+        t.scale.set(1.5, 1.5, 1.5);
+        t.position.set(0, 1.5, -i * 20);
+        t.userData = { type: isAT ? "AT" : "PT", triggered: false };
+        
+        t.traverse((node) => {
+            if (node.isMesh) {
+                node.material = node.material.clone();
+                node.material.color.set(isAT ? 0xff4444 : 0xffff88);
+            }
+        });
+        scene.add(t);
+        threats.push(t);
+    }
+}, undefined, (e) => console.error(e));
 
 // TUNNEL
 function createSeg(z, color) {
@@ -90,18 +89,24 @@ function createSeg(z, color) {
 }
 for(let i=0; i<40; i++) createSeg(-i*10, i%2==0 ? 0x0a1a3a : 0x0a2a0a);
 
-// GAME LOOP
-let keys = {}, armourUses = 0, armourActive = false, cooldown = false, speed = 0.2;
-
-window.onkeydown = function(e) { keys[e.key.toLowerCase()] = true; if(e.key=='f') activate(); };
-window.onkeyup = function(e) { keys[e.key.toLowerCase()] = false; };
+// CONTROLS
+let keys = {}, armourUses = 0, armourActive = false, cooldown = false;
+window.addEventListener('keydown', (e) => {
+    keys[e.key.toLowerCase()] = true;
+    if(e.key.toLowerCase() === 'f') activate();
+});
+window.addEventListener('keyup', (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
 
 function activate() {
     if(armourUses < 3 && !cooldown && !armourActive) {
         armourActive = true;
         armourUses++;
         document.getElementById("count").innerText = armourUses;
-        setTimeout(() => { armourActive = false; cooldown = true; 
+        setTimeout(() => { 
+            armourActive = false; 
+            cooldown = true; 
             setTimeout(() => { cooldown = false; }, 3000);
         }, 5000);
     }
@@ -109,7 +114,7 @@ function activate() {
 
 function animate() {
     requestAnimationFrame(animate);
-    if(keys['w']) player.position.z -= speed;
+    if(keys['w']) player.position.z -= 0.2;
     armourGroup.visible = armourActive;
     armourGroup.rotation.y += 0.05;
 
@@ -117,7 +122,10 @@ function animate() {
         t.rotation.y += 0.02;
         let d = Math.abs(player.position.z - t.position.z);
         if(d < 2 && !t.userData.triggered) {
-            if(t.userData.type == "AT" && !armourActive) { alert("Restarting"); location.reload(); }
+            if(t.userData.type == "AT" && !armourActive) { 
+                alert("Game Over! Restarting loop..."); 
+                location.reload(); 
+            }
             else if(t.userData.type == "PT") t.position.x += 5;
             t.userData.triggered = true;
         }
