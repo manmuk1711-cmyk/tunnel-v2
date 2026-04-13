@@ -36,10 +36,21 @@ body { margin:0; overflow:hidden; background:black; }
 
 <div id="overlay"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/loaders/GLTFLoader.js"></script>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+    }
+  }
+</script>
 
-<script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// --- CONFIG ---
+const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb';
 
 // SCENE
 let scene = new THREE.Scene();
@@ -124,42 +135,33 @@ for(let i=0;i<40;i++){
 let threats = [];
 const loader = new THREE.GLTFLoader();
 
-// REPLACE THIS with your actual GitHub Raw URL
-const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb/';
-
 let threatModelMaster;
 
-// Load the model once, then clone it for performance
 loader.load(GLB_URL, (gltf) => {
     threatModelMaster = gltf.scene;
-    // Initial spawn once model is loaded
+    // Spawn threats once the model is ready
     for(let i=1; i<30; i++){
         spawnThreatInstance(-i*20, Math.random() > 0.5 ? "AT" : "PT");
     }
-}, undefined, (error) => {
-    console.error("Error loading GLB:", error);
-});
+}, undefined, (err) => console.error("Model failed to load:", err));
 
 function spawnThreatInstance(z, type) {
     if (!threatModelMaster) return;
 
-    // Clone the loaded GLB
     let t = threatModelMaster.clone();
     
-    // Scale it (adjust these numbers if your model is too big/small)
-    t.scale.set(1, 1, 1); 
+    // Scale adjustment (Adjust if model is too big/small)
+    t.scale.set(0.8, 0.8, 0.8);
 
-    // Apply colors to the model based on type
-    // Note: This assumes your GLB has a mesh. 
-    // We traverse it to find the material and tint it.
+    // Apply color/emissive logic to GLB materials
     t.traverse((child) => {
         if (child.isMesh) {
-            child.material = child.material.clone(); // Clone so we don't tint every threat the same
+            child.material = child.material.clone();
             if (type === "AT") {
-                child.material.color.set(0xff4444); // Red for Actual
+                child.material.color.set(0xff4444);
                 child.material.emissive.set(0x440000);
             } else {
-                child.material.color.set(0xffff88); // Yellow for Perceived
+                child.material.color.set(0xffff88);
                 child.material.emissive.set(0x444400);
             }
         }
@@ -167,11 +169,9 @@ function spawnThreatInstance(z, type) {
 
     t.position.set(0, 1.5, z);
     t.userData = { type, triggered: false };
-    
     scene.add(t);
     threats.push(t);
 }
-// --- THREATS SECTION END ---
 
 // GAME STATE
 let speed = 0.2;
