@@ -2,142 +2,151 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Threat Loop - Built-in Assets</title>
+    <title>Threat Loop - Tactical Edition</title>
     <style>
-        body { margin:0; overflow:hidden; background:black; font-family:Arial; }
-        #ui { position:absolute; top:20px; left:20px; color:white; z-index:10; }
+        body { margin:0; overflow:hidden; background:black; font-family:Arial, sans-serif; }
+        #ui { position:absolute; top:20px; left:20px; color:white; z-index:10; pointer-events:none; }
+        #count, #cooldown { font-weight: bold; color: #00ffff; }
     </style>
 </head>
 <body>
 
 <div id="ui">
     W = Move | F = Armour<br>
-    Armour: <span id="count">0</span>/3 | <span id="cooldown">Ready</span>
+    Armour Uses: <span id="count">0</span>/3<br>
+    Status: <span id="cooldown">Ready</span>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-// --- SCENE SETUP ---
+// --- SCENE & RENDERER ---
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x000000, 10, 60);
+scene.fog = new THREE.Fog(0x000000, 10, 80);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTS
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 5);
-scene.add(light);
+// --- BRIGHTER LIGHTING ---
+scene.add(new THREE.AmbientLight(0xffffff, 0.9)); // High ambient brightness
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(5, 15, 5);
+scene.add(sun);
 
-// PLAYER & ARMOUR
+// --- PLAYER ---
 const player = new THREE.Object3D();
 player.position.set(0, 1.5, 0);
 scene.add(player);
-camera.position.set(0, 1.5, 2);
+camera.position.set(0, 1.5, 2.5);
 player.add(camera);
 
 const armourGroup = new THREE.Group();
-for(let i=0; i<6; i++){
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshStandardMaterial({color: 0x00ffff}));
-    const angle = (i/6) * Math.PI * 2;
-    cube.position.set(Math.cos(angle)*1.3, 0, Math.sin(angle)*1.3 - 1.2);
-    armourGroup.add(cube);
+for(let i=0; i<8; i++){
+    const hex = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25), new THREE.MeshStandardMaterial({color: 0x00ffff, emissive: 0x008888}));
+    const angle = (i/8) * Math.PI * 2;
+    hex.position.set(Math.cos(angle)*1.6, 0, Math.sin(angle)*1.6 - 1.2);
+    armourGroup.add(hex);
 }
 armourGroup.visible = false;
 player.add(armourGroup);
 
-// --- CUSTOM THREAT BUILDERS ---
-
-// 1. MACHINE SENTRY (Actual Threat)
-function createMachine() {
-    const group = new THREE.Group();
-    // Body
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x444444}));
-    // Glowing Eye
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xff0000}));
-    eye.position.set(0, 0.2, 0.5);
-    // Barrel
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.8), new THREE.MeshStandardMaterial({color: 0x222222}));
-    barrel.rotation.x = Math.PI/2;
-    barrel.position.z = 0.6;
-    group.add(body, eye, barrel);
-    return group;
+// --- BULLET SYSTEM ---
+let bullets = [];
+function fireBullet(pos) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xffaa00}));
+    b.position.copy(pos);
+    scene.add(b);
+    bullets.push(b);
 }
 
-// 2. WHALE (Perceived Threat)
+// --- MODEL BUILDERS ---
+
+function createHandgun() {
+    const g = new THREE.Group();
+    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 1.8), new THREE.MeshStandardMaterial({color: 0x222222}));
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.0, 0.5), new THREE.MeshStandardMaterial({color: 0x111111}));
+    grip.position.set(0, -0.6, -0.4);
+    g.add(slide, grip);
+    g.scale.set(2, 2, 2); // Larger Handgun
+    return g;
+}
+
+function createRifle() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 4), new THREE.MeshStandardMaterial({color: 0x1a1a1a}));
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 1), new THREE.MeshStandardMaterial({color: 0x111111}));
+    stock.position.set(0, -0.1, -2);
+    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1), new THREE.MeshStandardMaterial({color: 0x000000}));
+    scope.rotation.x = Math.PI/2;
+    scope.position.y = 0.35;
+    g.add(body, stock, scope);
+    g.scale.set(1.5, 1.5, 1.5);
+    return g;
+}
+
 function createWhale() {
-    const whale = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 32, 16), 
-        new THREE.MeshStandardMaterial({color: 0x1e3a5f})
-    );
-    whale.scale.set(1, 0.8, 2.5); // Make it long and whale-like
-    return whale;
+    const w = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 16), new THREE.MeshStandardMaterial({color: 0x1e3a5f}));
+    w.scale.set(1.5, 1.0, 4.0); // Massive Whale
+    return w;
 }
 
-// 3. KNIFE (Perceived Threat)
 function createKnife() {
-    const group = new THREE.Group();
-    // Blade
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.05), new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 1}));
-    // Handle
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.1), new THREE.MeshStandardMaterial({color: 0x332211}));
-    handle.position.y = -0.5;
-    group.add(blade, handle);
-    group.rotation.z = Math.PI / 4; // Tilted for throwing look
-    return group;
+    const g = new THREE.Group();
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.05), new THREE.MeshStandardMaterial({color: 0xdddddd, metalness: 1}));
+    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.15), new THREE.MeshStandardMaterial({color: 0x442200}));
+    hilt.position.y = -1.5;
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1, 0.25), new THREE.MeshStandardMaterial({color: 0x221100}));
+    handle.position.y = -2;
+    g.add(blade, hilt, handle);
+    g.scale.set(1.8, 1.8, 1.8); // Much larger knife
+    return g;
 }
 
-// --- SPAWNING ---
+// --- WORLD POPULATION ---
 let threats = [];
-for(let i=1; i<35; i++){
-    const rand = Math.random();
-    let t;
-    let type;
+for(let i=1; i<45; i++){
+    let type, mesh;
+    const r = Math.random();
+    if(r > 0.75) { type = "HANDGUN"; mesh = createHandgun(); }
+    else if(r > 0.5) { type = "RIFLE"; mesh = createRifle(); }
+    else if(r > 0.25) { type = "WHALE"; mesh = createWhale(); }
+    else { type = "KNIFE"; mesh = createKnife(); }
 
-    if(rand > 0.6) {
-        t = createMachine();
-        type = "AT";
-    } else if (rand > 0.3) {
-        t = createWhale();
-        type = "WHALE";
-        t.position.y = -2; // Start underwater
-    } else {
-        t = createKnife();
-        type = "KNIFE";
+    mesh.position.set(Math.random()*6-3, 1.5, -i*25);
+    if(type === "WHALE") {
+        mesh.position.x = Math.random() > 0.5 ? -10 : 10; // Start off-center
+        mesh.position.y = 1.5;
     }
-
-    t.position.z = -i * 25;
-    t.userData = { type: type, triggered: false, speed: 0.1 + Math.random() * 0.2 };
-    scene.add(t);
-    threats.push(t);
+    if(type === "KNIFE") {
+        mesh.rotation.x = -Math.PI/2;
+        mesh.position.y = 8; // Drop from sky
+    }
+    
+    mesh.userData = { type, triggered: false, lastShot: 0, veerDir: Math.random() > 0.5 ? 1 : -1 };
+    scene.add(mesh);
+    threats.push(mesh);
 }
 
-// WORLD (Tunnel)
-for(let i=0; i<60; i++) {
-    const mat = new THREE.MeshStandardMaterial({color: i % 2 == 0 ? 0x050505 : 0x111111});
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
-    floor.rotation.x = -Math.PI/2; floor.position.set(0,0,-i*10);
-    scene.add(floor);
+// TUNNEL
+for(let i=0; i<120; i++){
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(25, 10), new THREE.MeshStandardMaterial({color: i%2==0?0x080808:0x121212}));
+    plane.rotation.x = -Math.PI/2;
+    plane.position.z = -i*10;
+    scene.add(plane);
 }
 
-// GAME LOGIC
-let keys = {}, armourUses = 0, armourActive = false, cooldown = false;
-
-window.onkeydown = (e) => { 
-    keys[e.key.toLowerCase()] = true; 
-    if(e.key == 'f') activate(); 
-};
+// --- LOGIC ---
+let keys = {}, armourActive = false, armourUses = 0, cooldown = false;
+window.onkeydown = (e) => { keys[e.key.toLowerCase()] = true; if(e.key=='f') activateArmour(); };
 window.onkeyup = (e) => { keys[e.key.toLowerCase()] = false; };
 
-function activate() {
-    if(armourUses < 3 && !cooldown && !armourActive) {
+function activateArmour(){
+    if(armourUses < 3 && !armourActive && !cooldown) {
         armourActive = true; armourUses++;
         document.getElementById("count").innerText = armourUses;
-        setTimeout(() => { 
-            armourActive = false; cooldown = true; 
+        setTimeout(() => {
+            armourActive = false; cooldown = true;
             document.getElementById("cooldown").innerText = "Wait...";
             setTimeout(() => { cooldown = false; document.getElementById("cooldown").innerText = "Ready"; }, 3000);
         }, 5000);
@@ -146,32 +155,69 @@ function activate() {
 
 function animate() {
     requestAnimationFrame(animate);
-    if(keys['w']) player.position.z -= 0.25;
+    if(keys['w']) player.position.z -= 0.35; // Slightly faster movement
     armourGroup.visible = armourActive;
-    armourGroup.rotation.y += 0.05;
+    armourGroup.rotation.y += 0.08;
+
+    // Bullet Physics
+    for(let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.position.z += 1.2; // Bullet speed
+        
+        // Player Collision
+        const d = b.position.distanceTo(player.position);
+        if(d < 1.2) {
+            if(!armourActive) {
+                alert("Eliminated. The loop claims another.");
+                location.reload();
+            } else {
+                scene.remove(b);
+                bullets.splice(i, 1);
+                continue;
+            }
+        }
+        // Cleanup far bullets
+        if(b.position.z > player.position.z + 10) {
+            scene.remove(b);
+            bullets.splice(i, 1);
+        }
+    }
 
     threats.forEach(t => {
-        const dist = Math.abs(player.position.z - t.position.z);
+        const distZ = Math.abs(player.position.z - t.position.z);
 
-        // BEHAVIOR BASED ON TYPE
-        if(t.userData.type === "WHALE") {
-            // Whale rises up when player is 20 units away
-            if(dist < 25 && dist > 5) t.position.y += 0.1; 
-            if(dist < 5) t.position.y -= 0.2; // Then dives
-        }
-        
-        if(t.userData.type === "KNIFE") {
-            t.rotation.x += 0.1; // Spin while flying
-            if(dist < 10) { 
-                t.rotation.x = 0; // Stick in ground
-                t.position.y = 0.5;
+        // GUN LOGIC: Shoot when player is within 30 units
+        if((t.userData.type === "HANDGUN" || t.userData.type === "RIFLE") && distZ < 30 && distZ > 2) {
+            const now = Date.now();
+            const fireRate = t.userData.type === "RIFLE" ? 1200 : 2000;
+            if(now - t.userData.lastShot > fireRate) {
+                fireBullet(t.position.clone());
+                t.userData.lastShot = now;
             }
         }
 
-        // COLLISION
-        if(dist < 2 && !t.userData.triggered) {
-            if(t.userData.type === "AT" && !armourActive) {
-                alert("Terminated by Machine. Loop restarting.");
+        // WHALE LOGIC: Veer off
+        if(t.userData.type === "WHALE") {
+            if(distZ < 30 && distZ > 5) {
+                // Moves toward center, then veers
+                t.position.x += (0 - t.position.x) * 0.02;
+            } else if (distZ <= 5) {
+                t.position.x += t.userData.veerDir * 0.5; // Quick veer off
+            }
+        }
+
+        // KNIFE LOGIC: Large drop
+        if(t.userData.type === "KNIFE") {
+            if(distZ < 20 && t.position.y > 0.5) {
+                t.position.y -= 0.5; // Drop from sky
+                t.rotation.z += 0.2; // Spin on way down
+            }
+        }
+
+        // PHYSICAL COLLISION (For things you walk into)
+        if(distZ < 2.5 && !t.userData.triggered) {
+            if((t.userData.type === "HANDGUN" || t.userData.type === "RIFLE") && !armourActive) {
+                alert("Collision with Sentinel. Loop restarting.");
                 location.reload();
             }
             t.userData.triggered = true;
@@ -181,6 +227,12 @@ function animate() {
     renderer.render(scene, camera);
 }
 animate();
+
+window.onresize = () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+};
 </script>
 </body>
 </html>
