@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Threat Loop - Knife Edition</title>
+    <title>Threat Loop - Security Bypass</title>
     <style>
         body { margin:0; overflow:hidden; background:black; }
         #ui { position:absolute; top:20px; left:20px; color:white; font-family:Arial; z-index:10; }
-        #overlay { position:absolute; width:100%; height:100%; background:rgba(0,255,255,0); pointer-events:none; z-index:5; }
     </style>
 </head>
 <body>
@@ -16,32 +15,26 @@
     Armour Uses: <span id="count">0</span>/3<br>
     Cooldown: <span id="cooldown">Ready</span>
 </div>
-<div id="overlay"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.145.0/build/three.min.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/three@0.145.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
 // --- CONFIG ---
-const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb';
+// We use the direct raw.githubusercontent link to avoid GitHub's redirector which triggers CSP
+const GLB_URL = 'https://raw.githubusercontent.com/manmuk1711-cmyk/tunnel-v2/main/knife%20threat.%20glb.glb';
 
-// SCENE SETUP
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x000000, 10, 60);
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTS
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 5);
 scene.add(light);
 
-// PLAYER
 const player = new THREE.Object3D();
 player.position.set(0, 1.5, 0);
 scene.add(player);
@@ -51,135 +44,87 @@ player.add(camera);
 // ARMOUR
 const armourGroup = new THREE.Group();
 for(let i=0; i<6; i++){
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({color: 0x00ffff}));
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshStandardMaterial({color: 0x00ffff}));
     const angle = (i/6) * Math.PI * 2;
-    cube.position.set(Math.cos(angle)*1.5, 0, Math.sin(angle)*1.5 - 1.2);
+    cube.position.set(Math.cos(angle)*1.2, 0, Math.sin(angle)*1.2 - 1.0);
     armourGroup.add(cube);
 }
 armourGroup.visible = false;
 player.add(armourGroup);
 
-// WORLD
-function createSegment(z, type){
-    const mat = new THREE.MeshStandardMaterial({color: type === "water" ? 0x0a1a3a : 0x0a2a0a});
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
-    floor.rotation.x = -Math.PI/2; floor.position.set(0, 0, z);
-    const wallL = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), mat);
-    wallL.position.set(-10, 5, z); wallL.rotation.y = Math.PI/2;
-    const wallR = wallL.clone(); wallR.position.set(10, 5, z); wallR.rotation.y = -Math.PI/2;
-    const ceiling = floor.clone(); ceiling.position.set(0, 10, z); ceiling.rotation.x = Math.PI/2;
-    scene.add(floor, wallL, wallR, ceiling);
-}
-for(let i=0; i<40; i++) createSegment(-i*10, i%2===0 ? "water" : "forest");
-
-// --- THREAT LOGIC ---
+// THREATS
 let threats = [];
-// This uses THREE.GLTFLoader but from a version that supports this syntax
-const loader = new THREE.GLTFLoader(); 
 
-loader.load(GLB_URL, function(gltf) {
-    const masterModel = gltf.scene;
-    for(let i=1; i<30; i++){
-        const isActual = Math.random() > 0.5;
-        const t = masterModel.clone();
-        
-        t.scale.set(1.5, 1.5, 1.5);
-        t.position.set(0, 1.5, -i * 20);
-        t.userData = { type: isActual ? "AT" : "PT", triggered: false };
-
-        t.traverse(function(child) {
-            if (child.isMesh) {
-                child.material = child.material.clone();
-                child.material.color.set(isActual ? 0xff4444 : 0xffff88);
-            }
-        });
-        scene.add(t);
-        threats.push(t);
-    }
-}, undefined, function(err) {
-    console.error("Loader failed:", err);
-});
-
-// ENGINE
-let keys = {};
-let speed = 0.2;
-let armourUses = 0;
-let armourActive = false;
-let cooldown = false;
-let systemLocked = false;
-let armourStart = 0;
-let cooldownStart = 0;
-
-window.addEventListener("keydown", function(e) {
-    keys[e.key.toLowerCase()] = true;
-    if(e.key.toLowerCase() === "f") activateArmour();
-});
-window.addEventListener("keyup", function(e) { keys[e.key.toLowerCase()] = false; });
-
-function activateArmour(){
-    if(armourUses >= 3 || cooldown || armourActive || systemLocked) return;
-    armourActive = true;
-    armourStart = Date.now();
-    armourUses++;
-    document.getElementById("count").innerText = armourUses;
+// CSP SAFE LOADING CHECK
+if (typeof THREE.GLTFLoader === 'undefined') {
+    console.error("Loader blocked by CSP. Attempting fallback...");
+} else {
+    const loader = new THREE.GLTFLoader();
+    loader.load(GLB_URL, function(gltf) {
+        const master = gltf.scene;
+        for(let i=1; i<30; i++){
+            const isAT = Math.random() > 0.5;
+            const t = master.clone();
+            t.scale.set(1.2, 1.2, 1.2);
+            t.position.set(0, 1.5, -i * 20);
+            t.userData = { type: isAT ? "AT" : "PT", triggered: false };
+            
+            t.traverse(function(node) {
+                if (node.isMesh) {
+                    node.material = node.material.clone();
+                    node.material.color.set(isAT ? 0xff4444 : 0xffff88);
+                }
+            });
+            scene.add(t);
+            threats.push(t);
+        }
+    }, undefined, function(e) { console.error("GLB Error:", e); });
 }
 
-function animate(){
+// TUNNEL
+function createSeg(z, color) {
+    const m = new THREE.MeshStandardMaterial({color: color});
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), m);
+    f.rotation.x = -Math.PI/2; f.position.set(0,0,z);
+    scene.add(f);
+}
+for(let i=0; i<40; i++) createSeg(-i*10, i%2==0 ? 0x0a1a3a : 0x0a2a0a);
+
+// GAME LOOP
+let keys = {}, armourUses = 0, armourActive = false, cooldown = false, speed = 0.2;
+
+window.onkeydown = function(e) { keys[e.key.toLowerCase()] = true; if(e.key=='f') activate(); };
+window.onkeyup = function(e) { keys[e.key.toLowerCase()] = false; };
+
+function activate() {
+    if(armourUses < 3 && !cooldown && !armourActive) {
+        armourActive = true;
+        armourUses++;
+        document.getElementById("count").innerText = armourUses;
+        setTimeout(() => { armourActive = false; cooldown = true; 
+            setTimeout(() => { cooldown = false; }, 3000);
+        }, 5000);
+    }
+}
+
+function animate() {
     requestAnimationFrame(animate);
+    if(keys['w']) player.position.z -= speed;
+    armourGroup.visible = armourActive;
+    armourGroup.rotation.y += 0.05;
 
-    if(systemLocked) player.position.z -= speed * 0.5;
-    else if(keys["w"]) player.position.z -= speed;
-
-    if(armourActive){
-        armourGroup.visible = true;
-        armourGroup.rotation.y += 0.05;
-        if(Date.now() - armourStart > 5000){
-            armourActive = false;
-            cooldown = true;
-            cooldownStart = Date.now();
-        }
-    } else {
-        armourGroup.visible = false;
-    }
-
-    if(cooldown){
-        let rem = Math.ceil((3000 - (Date.now()-cooldownStart))/1000);
-        document.getElementById("cooldown").innerText = (rem > 0 ? rem : 0) + "s";
-        if(Date.now() - cooldownStart > 3000){
-            cooldown = false;
-            document.getElementById("cooldown").innerText = "Ready";
-        }
-    }
-
-    threats.forEach(function(t) {
-        t.position.y = 1.5 + Math.sin(Date.now()*0.002 + t.position.z)*0.2;
+    threats.forEach(t => {
         t.rotation.y += 0.02;
-        let dist = Math.abs(player.position.z - t.position.z);
-        if(dist < 2.5 && !t.userData.triggered){
-            if(t.userData.type === "AT" && !armourActive){
-                alert("Hit! Loop restarts.");
-                location.reload();
-            } else if(t.userData.type === "PT") {
-                t.position.x += 6;
-            }
+        let d = Math.abs(player.position.z - t.position.z);
+        if(d < 2 && !t.userData.triggered) {
+            if(t.userData.type == "AT" && !armourActive) { alert("Restarting"); location.reload(); }
+            else if(t.userData.type == "PT") t.position.x += 5;
             t.userData.triggered = true;
         }
     });
-
-    if(armourUses >= 3 && !systemLocked){
-        systemLocked = true;
-        camera.position.set(0, 3, 6);
-        camera.lookAt(player.position);
-    }
     renderer.render(scene, camera);
 }
 animate();
-
-window.addEventListener('resize', function() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
 </script>
 </body>
 </html>
