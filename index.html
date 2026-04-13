@@ -18,20 +18,12 @@
 </div>
 <div id="overlay"></div>
 
-<script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
-    }
-  }
-</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.145.0/build/three.min.js"></script>
 
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+<script src="https://cdn.jsdelivr.net/npm/three@0.145.0/examples/js/loaders/GLTFLoader.js"></script>
 
-// --- SETTINGS ---
+<script>
+// --- CONFIG ---
 const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb';
 
 // SCENE SETUP
@@ -43,11 +35,11 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTING
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-const spot = new THREE.DirectionalLight(0xffffff, 1);
-spot.position.set(5, 10, 5);
-scene.add(spot);
+// LIGHTS
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 10, 5);
+scene.add(light);
 
 // PLAYER
 const player = new THREE.Object3D();
@@ -56,7 +48,7 @@ scene.add(player);
 camera.position.set(0, 1.5, 2);
 player.add(camera);
 
-// ARMOUR VISUAL
+// ARMOUR
 const armourGroup = new THREE.Group();
 for(let i=0; i<6; i++){
     const cube = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({color: 0x00ffff}));
@@ -67,7 +59,7 @@ for(let i=0; i<6; i++){
 armourGroup.visible = false;
 player.add(armourGroup);
 
-// WORLD GENERATION (Tunnel)
+// WORLD
 function createSegment(z, type){
     const mat = new THREE.MeshStandardMaterial({color: type === "water" ? 0x0a1a3a : 0x0a2a0a});
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
@@ -80,42 +72,35 @@ function createSegment(z, type){
 }
 for(let i=0; i<40; i++) createSegment(-i*10, i%2===0 ? "water" : "forest");
 
-// --- THREAT LOADING SYSTEM ---
+// --- THREAT LOGIC ---
 let threats = [];
-const loader = new GLTFLoader();
+// This uses THREE.GLTFLoader but from a version that supports this syntax
+const loader = new THREE.GLTFLoader(); 
 
-loader.load(GLB_URL, (gltf) => {
-    console.log("Knife model loaded successfully!");
+loader.load(GLB_URL, function(gltf) {
     const masterModel = gltf.scene;
-    
     for(let i=1; i<30; i++){
         const isActual = Math.random() > 0.5;
-        const type = isActual ? "AT" : "PT";
-        
         const t = masterModel.clone();
         
-        // Adjust scale: Knives might be small/large depending on export
-        t.scale.set(1.5, 1.5, 1.5); 
+        t.scale.set(1.5, 1.5, 1.5);
         t.position.set(0, 1.5, -i * 20);
-        t.userData = { type: type, triggered: false };
+        t.userData = { type: isActual ? "AT" : "PT", triggered: false };
 
-        // Color individual clones (Red for real threats, Yellow for fake)
-        t.traverse((child) => {
+        t.traverse(function(child) {
             if (child.isMesh) {
                 child.material = child.material.clone();
                 child.material.color.set(isActual ? 0xff4444 : 0xffff88);
-                child.material.emissive = new THREE.Color(isActual ? 0x330000 : 0x333300);
             }
         });
-
         scene.add(t);
         threats.push(t);
     }
-}, undefined, (err) => {
-    console.error("Error loading the GLB from GitHub:", err);
+}, undefined, function(err) {
+    console.error("Loader failed:", err);
 });
 
-// GAME LOGIC
+// ENGINE
 let keys = {};
 let speed = 0.2;
 let armourUses = 0;
@@ -125,11 +110,11 @@ let systemLocked = false;
 let armourStart = 0;
 let cooldownStart = 0;
 
-window.addEventListener("keydown", e => {
+window.addEventListener("keydown", function(e) {
     keys[e.key.toLowerCase()] = true;
     if(e.key.toLowerCase() === "f") activateArmour();
 });
-window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+window.addEventListener("keyup", function(e) { keys[e.key.toLowerCase()] = false; });
 
 function activateArmour(){
     if(armourUses >= 3 || cooldown || armourActive || systemLocked) return;
@@ -142,11 +127,9 @@ function activateArmour(){
 function animate(){
     requestAnimationFrame(animate);
 
-    // Controls
     if(systemLocked) player.position.z -= speed * 0.5;
     else if(keys["w"]) player.position.z -= speed;
 
-    // Armour State
     if(armourActive){
         armourGroup.visible = true;
         armourGroup.rotation.y += 0.05;
@@ -159,7 +142,44 @@ function animate(){
         armourGroup.visible = false;
     }
 
-    // Cooldown Logic
     if(cooldown){
         let rem = Math.ceil((3000 - (Date.now()-cooldownStart))/1000);
-        document.getElementById("cooldown").innerText =
+        document.getElementById("cooldown").innerText = (rem > 0 ? rem : 0) + "s";
+        if(Date.now() - cooldownStart > 3000){
+            cooldown = false;
+            document.getElementById("cooldown").innerText = "Ready";
+        }
+    }
+
+    threats.forEach(function(t) {
+        t.position.y = 1.5 + Math.sin(Date.now()*0.002 + t.position.z)*0.2;
+        t.rotation.y += 0.02;
+        let dist = Math.abs(player.position.z - t.position.z);
+        if(dist < 2.5 && !t.userData.triggered){
+            if(t.userData.type === "AT" && !armourActive){
+                alert("Hit! Loop restarts.");
+                location.reload();
+            } else if(t.userData.type === "PT") {
+                t.position.x += 6;
+            }
+            t.userData.triggered = true;
+        }
+    });
+
+    if(armourUses >= 3 && !systemLocked){
+        systemLocked = true;
+        camera.position.set(0, 3, 6);
+        camera.lookAt(player.position);
+    }
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', function() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
