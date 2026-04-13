@@ -2,36 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Threat Loop Experience</title>
+    <title>Threat Loop - Knife Edition</title>
     <style>
         body { margin:0; overflow:hidden; background:black; }
-        #ui {
-            position:absolute;
-            top:20px;
-            left:20px;
-            color:white;
-            font-family:Arial;
-            z-index: 10;
-        }
-        #overlay {
-            position:absolute;
-            width:100%;
-            height:100%;
-            background:rgba(0,255,255,0);
-            pointer-events:none;
-            z-index: 5;
-        }
+        #ui { position:absolute; top:20px; left:20px; color:white; font-family:Arial; z-index:10; }
+        #overlay { position:absolute; width:100%; height:100%; background:rgba(0,255,255,0); pointer-events:none; z-index:5; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    W = Move<br>
-    F = Armour<br>
-    Armour Uses: <span id="count">0</span><br>
+    W = Move | F = Armour<br>
+    Armour Uses: <span id="count">0</span>/3<br>
     Cooldown: <span id="cooldown">Ready</span>
 </div>
-
 <div id="overlay"></div>
 
 <script type="importmap">
@@ -47,118 +31,99 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// --- CONFIG ---
-// IMPORTANT: Use the RAW link from GitHub here
-const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb'; 
+// --- SETTINGS ---
+const GLB_URL = 'https://github.com/manmuk1711-cmyk/tunnel-v2/raw/refs/heads/main/knife%20threat.%20glb.glb';
 
-// SCENE
-let scene = new THREE.Scene();
+// SCENE SETUP
+const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x000000, 10, 60);
 
-let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-let renderer = new THREE.WebGLRenderer({ antialias: true });
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTS
-scene.add(new THREE.AmbientLight(0xffffff, 0.8)); // Brightened for models
-let directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(5, 10, 5);
-scene.add(directionalLight);
+// LIGHTING
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const spot = new THREE.DirectionalLight(0xffffff, 1);
+spot.position.set(5, 10, 5);
+scene.add(spot);
 
 // PLAYER
-let player = new THREE.Object3D();
+const player = new THREE.Object3D();
 player.position.set(0, 1.5, 0);
 scene.add(player);
-
 camera.position.set(0, 1.5, 2);
 player.add(camera);
 
 // ARMOUR VISUAL
-let armourGroup = new THREE.Group();
+const armourGroup = new THREE.Group();
 for(let i=0; i<6; i++){
-    let cube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.4, 0.4, 0.4),
-        new THREE.MeshStandardMaterial({color: 0x00ffff})
-    );
-    let angle = (i/6) * Math.PI * 2;
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({color: 0x00ffff}));
+    const angle = (i/6) * Math.PI * 2;
     cube.position.set(Math.cos(angle)*1.5, 0, Math.sin(angle)*1.5 - 1.2);
     armourGroup.add(cube);
 }
 armourGroup.visible = false;
 player.add(armourGroup);
 
-// TUNNEL SEGMENTS
+// WORLD GENERATION (Tunnel)
 function createSegment(z, type){
-    let color = type === "water" ? 0x0a1a3a : 0x0a2a0a;
-    let mat = new THREE.MeshStandardMaterial({color});
-    let floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
-    floor.rotation.x = -Math.PI/2;
-    floor.position.set(0, 0, z);
-    let wallL = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), mat);
-    wallL.position.set(-10, 5, z);
-    wallL.rotation.y = Math.PI/2;
-    let wallR = wallL.clone();
-    wallR.position.set(10, 5, z);
-    wallR.rotation.y = -Math.PI/2;
-    let ceiling = floor.clone();
-    ceiling.position.set(0, 10, z);
-    ceiling.rotation.x = Math.PI/2;
+    const mat = new THREE.MeshStandardMaterial({color: type === "water" ? 0x0a1a3a : 0x0a2a0a});
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
+    floor.rotation.x = -Math.PI/2; floor.position.set(0, 0, z);
+    const wallL = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), mat);
+    wallL.position.set(-10, 5, z); wallL.rotation.y = Math.PI/2;
+    const wallR = wallL.clone(); wallR.position.set(10, 5, z); wallR.rotation.y = -Math.PI/2;
+    const ceiling = floor.clone(); ceiling.position.set(0, 10, z); ceiling.rotation.x = Math.PI/2;
     scene.add(floor, wallL, wallR, ceiling);
 }
-for(let i=0; i<40; i++){
-    createSegment(-i*10, i%2===0 ? "water" : "forest");
-}
+for(let i=0; i<40; i++) createSegment(-i*10, i%2===0 ? "water" : "forest");
 
-// --- THREAT LOGIC ---
+// --- THREAT LOADING SYSTEM ---
 let threats = [];
-const loader = new GLTFLoader(); // FIXED: No "THREE." prefix
-let threatModelMaster;
+const loader = new GLTFLoader();
 
 loader.load(GLB_URL, (gltf) => {
-    threatModelMaster = gltf.scene;
+    console.log("Knife model loaded successfully!");
+    const masterModel = gltf.scene;
+    
     for(let i=1; i<30; i++){
-        spawnThreatInstance(-i*20, Math.random() > 0.5 ? "AT" : "PT");
-    }
-}, undefined, (err) => console.error("Loader Error:", err));
+        const isActual = Math.random() > 0.5;
+        const type = isActual ? "AT" : "PT";
+        
+        const t = masterModel.clone();
+        
+        // Adjust scale: Knives might be small/large depending on export
+        t.scale.set(1.5, 1.5, 1.5); 
+        t.position.set(0, 1.5, -i * 20);
+        t.userData = { type: type, triggered: false };
 
-function spawnThreatInstance(z, type) {
-    if (!threatModelMaster) return;
-    let t = threatModelMaster.clone();
-    t.scale.set(0.7, 0.7, 0.7); // Adjust scale as needed
-
-    t.traverse((child) => {
-        if (child.isMesh) {
-            child.material = child.material.clone();
-            if (type === "AT") {
-                child.material.color.set(0xff4444); // Red Actual Threat
-                child.material.emissive.set(0x440000);
-            } else {
-                child.material.color.set(0xffff88); // Yellow Perceived Threat
-                child.material.emissive.set(0x444400);
+        // Color individual clones (Red for real threats, Yellow for fake)
+        t.traverse((child) => {
+            if (child.isMesh) {
+                child.material = child.material.clone();
+                child.material.color.set(isActual ? 0xff4444 : 0xffff88);
+                child.material.emissive = new THREE.Color(isActual ? 0x330000 : 0x333300);
             }
-        }
-    });
+        });
 
-    t.position.set(0, 1.5, z);
-    t.userData = { type, triggered: false };
-    scene.add(t);
-    threats.push(t);
-}
+        scene.add(t);
+        threats.push(t);
+    }
+}, undefined, (err) => {
+    console.error("Error loading the GLB from GitHub:", err);
+});
 
-// GAMEPLAY VARIABLES
+// GAME LOGIC
 let keys = {};
 let speed = 0.2;
 let armourUses = 0;
-const MAX_ARMOUR = 3;
 let armourActive = false;
-let armourStart = 0;
-const ARMOUR_DURATION = 5000;
 let cooldown = false;
-let cooldownStart = 0;
-const COOLDOWN_TIME = 3000;
 let systemLocked = false;
-let overlay = document.getElementById("overlay");
+let armourStart = 0;
+let cooldownStart = 0;
 
 window.addEventListener("keydown", e => {
     keys[e.key.toLowerCase()] = true;
@@ -167,7 +132,7 @@ window.addEventListener("keydown", e => {
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
 function activateArmour(){
-    if(armourUses >= MAX_ARMOUR || cooldown || armourActive || systemLocked) return;
+    if(armourUses >= 3 || cooldown || armourActive || systemLocked) return;
     armourActive = true;
     armourStart = Date.now();
     armourUses++;
@@ -177,67 +142,24 @@ function activateArmour(){
 function animate(){
     requestAnimationFrame(animate);
 
-    if(systemLocked){
-        player.position.z -= speed * 0.5;
-    } else if(keys["w"]){
-        player.position.z -= speed;
-    }
+    // Controls
+    if(systemLocked) player.position.z -= speed * 0.5;
+    else if(keys["w"]) player.position.z -= speed;
 
+    // Armour State
     if(armourActive){
         armourGroup.visible = true;
         armourGroup.rotation.y += 0.05;
-        overlay.style.background = "rgba(0,255,255,0.1)";
-        if(Date.now() - armourStart > ARMOUR_DURATION){
+        if(Date.now() - armourStart > 5000){
             armourActive = false;
             cooldown = true;
             cooldownStart = Date.now();
         }
     } else {
         armourGroup.visible = false;
-        overlay.style.background = "rgba(0,0,0,0)";
     }
 
+    // Cooldown Logic
     if(cooldown){
-        let rem = Math.ceil((COOLDOWN_TIME - (Date.now()-cooldownStart))/1000);
-        document.getElementById("cooldown").innerText = (rem > 0 ? rem : 0) + "s";
-        if(Date.now() - cooldownStart > COOLDOWN_TIME){
-            cooldown = false;
-            document.getElementById("cooldown").innerText = "Ready";
-        }
-    }
-
-    threats.forEach(t => {
-        t.position.y = 1.5 + Math.sin(Date.now()*0.002 + t.position.z)*0.3;
-        let dist = Math.abs(player.position.z - t.position.z);
-        if(dist < 2.5 && !t.userData.triggered){
-            if(t.userData.type === "AT"){
-                if(!armourActive){
-                    alert("Hit by Actual Threat! Restarting...");
-                    location.reload();
-                }
-            } else {
-                t.position.x += (Math.random() > 0.5 ? 5 : -5); // Perceived threat dodges
-            }
-            t.userData.triggered = true;
-        }
-    });
-
-    if(armourUses >= MAX_ARMOUR && !systemLocked){
-        systemLocked = true;
-        camera.position.set(0, 3, 6);
-        camera.lookAt(player.position);
-    }
-
-    renderer.render(scene, camera);
-}
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-animate();
-</script>
-</body>
-</html>
+        let rem = Math.ceil((3000 - (Date.now()-cooldownStart))/1000);
+        document.getElementById("cooldown").innerText =
