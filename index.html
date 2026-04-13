@@ -2,134 +2,182 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Threat Loop - CSP Safe</title>
+    <title>Threat Loop - Built-in Assets</title>
     <style>
-        body { margin:0; overflow:hidden; background:black; }
-        #ui { position:absolute; top:20px; left:20px; color:white; font-family:Arial; z-index:10; }
+        body { margin:0; overflow:hidden; background:black; font-family:Arial; }
+        #ui { position:absolute; top:20px; left:20px; color:white; z-index:10; }
     </style>
 </head>
 <body>
 
 <div id="ui">
     W = Move | F = Armour<br>
-    Armour Uses: <span id="count">0</span>/3<br>
-    Cooldown: <span id="cooldown">Ready</span>
+    Armour: <span id="count">0</span>/3 | <span id="cooldown">Ready</span>
 </div>
 
-<script type="module">
-// We import directly from the CDN as modules. 
-// This avoids the 'eval' issues found in the older "Global" scripts.
-import * as THREE from 'https://cdn.skypack.dev/three@0.158.0';
-import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-const GLB_URL = 'https://raw.githubusercontent.com/manmuk1711-cmyk/tunnel-v2/main/knife%20threat.%20glb.glb';
-
-// SCENE SETUP
+<script>
+// --- SCENE SETUP ---
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x000000, 10, 60);
-
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(5, 10, 5);
-scene.add(sun);
+// LIGHTS
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 10, 5);
+scene.add(light);
 
-// PLAYER
+// PLAYER & ARMOUR
 const player = new THREE.Object3D();
 player.position.set(0, 1.5, 0);
 scene.add(player);
 camera.position.set(0, 1.5, 2);
 player.add(camera);
 
-// ARMOUR
 const armourGroup = new THREE.Group();
 for(let i=0; i<6; i++){
     const cube = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshStandardMaterial({color: 0x00ffff}));
     const angle = (i/6) * Math.PI * 2;
-    cube.position.set(Math.cos(angle)*1.2, 0, Math.sin(angle)*1.2 - 1.0);
+    cube.position.set(Math.cos(angle)*1.3, 0, Math.sin(angle)*1.3 - 1.2);
     armourGroup.add(cube);
 }
 armourGroup.visible = false;
 player.add(armourGroup);
 
-// THREATS
-let threats = [];
-const loader = new GLTFLoader();
+// --- CUSTOM THREAT BUILDERS ---
 
-loader.load(GLB_URL, (gltf) => {
-    const master = gltf.scene;
-    for(let i=1; i<30; i++){
-        const isAT = Math.random() > 0.5;
-        const t = master.clone();
-        t.scale.set(1.5, 1.5, 1.5);
-        t.position.set(0, 1.5, -i * 20);
-        t.userData = { type: isAT ? "AT" : "PT", triggered: false };
-        
-        t.traverse((node) => {
-            if (node.isMesh) {
-                node.material = node.material.clone();
-                node.material.color.set(isAT ? 0xff4444 : 0xffff88);
-            }
-        });
-        scene.add(t);
-        threats.push(t);
-    }
-}, undefined, (e) => console.error(e));
-
-// TUNNEL
-function createSeg(z, color) {
-    const m = new THREE.MeshStandardMaterial({color: color});
-    const f = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), m);
-    f.rotation.x = -Math.PI/2; f.position.set(0,0,z);
-    scene.add(f);
+// 1. MACHINE SENTRY (Actual Threat)
+function createMachine() {
+    const group = new THREE.Group();
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x444444}));
+    // Glowing Eye
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xff0000}));
+    eye.position.set(0, 0.2, 0.5);
+    // Barrel
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.8), new THREE.MeshStandardMaterial({color: 0x222222}));
+    barrel.rotation.x = Math.PI/2;
+    barrel.position.z = 0.6;
+    group.add(body, eye, barrel);
+    return group;
 }
-for(let i=0; i<40; i++) createSeg(-i*10, i%2==0 ? 0x0a1a3a : 0x0a2a0a);
 
-// CONTROLS
+// 2. WHALE (Perceived Threat)
+function createWhale() {
+    const whale = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 32, 16), 
+        new THREE.MeshStandardMaterial({color: 0x1e3a5f})
+    );
+    whale.scale.set(1, 0.8, 2.5); // Make it long and whale-like
+    return whale;
+}
+
+// 3. KNIFE (Perceived Threat)
+function createKnife() {
+    const group = new THREE.Group();
+    // Blade
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.05), new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 1}));
+    // Handle
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.1), new THREE.MeshStandardMaterial({color: 0x332211}));
+    handle.position.y = -0.5;
+    group.add(blade, handle);
+    group.rotation.z = Math.PI / 4; // Tilted for throwing look
+    return group;
+}
+
+// --- SPAWNING ---
+let threats = [];
+for(let i=1; i<35; i++){
+    const rand = Math.random();
+    let t;
+    let type;
+
+    if(rand > 0.6) {
+        t = createMachine();
+        type = "AT";
+    } else if (rand > 0.3) {
+        t = createWhale();
+        type = "WHALE";
+        t.position.y = -2; // Start underwater
+    } else {
+        t = createKnife();
+        type = "KNIFE";
+    }
+
+    t.position.z = -i * 25;
+    t.userData = { type: type, triggered: false, speed: 0.1 + Math.random() * 0.2 };
+    scene.add(t);
+    threats.push(t);
+}
+
+// WORLD (Tunnel)
+for(let i=0; i<60; i++) {
+    const mat = new THREE.MeshStandardMaterial({color: i % 2 == 0 ? 0x050505 : 0x111111});
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), mat);
+    floor.rotation.x = -Math.PI/2; floor.position.set(0,0,-i*10);
+    scene.add(floor);
+}
+
+// GAME LOGIC
 let keys = {}, armourUses = 0, armourActive = false, cooldown = false;
-window.addEventListener('keydown', (e) => {
-    keys[e.key.toLowerCase()] = true;
-    if(e.key.toLowerCase() === 'f') activate();
-});
-window.addEventListener('keyup', (e) => {
-    keys[e.key.toLowerCase()] = false;
-});
+
+window.onkeydown = (e) => { 
+    keys[e.key.toLowerCase()] = true; 
+    if(e.key == 'f') activate(); 
+};
+window.onkeyup = (e) => { keys[e.key.toLowerCase()] = false; };
 
 function activate() {
     if(armourUses < 3 && !cooldown && !armourActive) {
-        armourActive = true;
-        armourUses++;
+        armourActive = true; armourUses++;
         document.getElementById("count").innerText = armourUses;
         setTimeout(() => { 
-            armourActive = false; 
-            cooldown = true; 
-            setTimeout(() => { cooldown = false; }, 3000);
+            armourActive = false; cooldown = true; 
+            document.getElementById("cooldown").innerText = "Wait...";
+            setTimeout(() => { cooldown = false; document.getElementById("cooldown").innerText = "Ready"; }, 3000);
         }, 5000);
     }
 }
 
 function animate() {
     requestAnimationFrame(animate);
-    if(keys['w']) player.position.z -= 0.2;
+    if(keys['w']) player.position.z -= 0.25;
     armourGroup.visible = armourActive;
     armourGroup.rotation.y += 0.05;
 
     threats.forEach(t => {
-        t.rotation.y += 0.02;
-        let d = Math.abs(player.position.z - t.position.z);
-        if(d < 2 && !t.userData.triggered) {
-            if(t.userData.type == "AT" && !armourActive) { 
-                alert("Game Over! Restarting loop..."); 
-                location.reload(); 
+        const dist = Math.abs(player.position.z - t.position.z);
+
+        // BEHAVIOR BASED ON TYPE
+        if(t.userData.type === "WHALE") {
+            // Whale rises up when player is 20 units away
+            if(dist < 25 && dist > 5) t.position.y += 0.1; 
+            if(dist < 5) t.position.y -= 0.2; // Then dives
+        }
+        
+        if(t.userData.type === "KNIFE") {
+            t.rotation.x += 0.1; // Spin while flying
+            if(dist < 10) { 
+                t.rotation.x = 0; // Stick in ground
+                t.position.y = 0.5;
             }
-            else if(t.userData.type == "PT") t.position.x += 5;
+        }
+
+        // COLLISION
+        if(dist < 2 && !t.userData.triggered) {
+            if(t.userData.type === "AT" && !armourActive) {
+                alert("Terminated by Machine. Loop restarting.");
+                location.reload();
+            }
             t.userData.triggered = true;
         }
     });
+
     renderer.render(scene, camera);
 }
 animate();
